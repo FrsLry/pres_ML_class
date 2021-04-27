@@ -1,0 +1,192 @@
+---
+title: "Machine Learning class short presentation - Kmeans"
+output:
+  xaringan::moon_reader:
+    seal: false
+    self_contained: true  ## otherwise you need the entire folder to see the slides correctly
+    yolo: false
+    css: ["css_template/middlebury.css", "css_template/tamu-fonts.css"] ## Note that if you don't specify the .css after the file name here, xaringan will import and renew the template at each run in ./libs/remark-css/
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+      titleSlideClass: [top, left, inverse]
+---
+
+```{r, echo=F}
+knitr::opts_chunk$set(message = F, 
+                      warning = F)
+```
+
+
+
+class: inverse, center, middle
+
+
+# Question 1
+
+Load the Titanic data set and run the K-Means algorithm to cluster the passengers into 2 clusters (K = 2). Do not use the attribute Survived.
+
+
+How much do these two clusters and the Survived and NotSurvived subgroups overlap?
+ 
+
+Experiment with different subsets of the given features. You can add some new feature(s).
+
+---
+
+# Set up the project
+
+</br>
+</br>
+
+* Libraries
+
+```{r}
+rm(list = ls())
+library(tidyverse)
+library(ggpubr) # to plot the kmean
+library(factoextra) # to get the coordinates of the PCA
+```
+
+</br>
+</br>
+
+* Load the dataset
+
+```{r,}
+titanic <- read_csv("data/train.csv")
+```
+
+---
+
+.center[**Load the Titanic data set and run the K-Means algorithm to cluster the passengers into 2 clusters (K = 2). Do not use the attribute Survived.**]
+
+</br>
+</br>
+
+* K-mean algorithm works only on numeric data. Thus, we have to transform binary character variables into numeric ones (*e.g* sex) and take off the qualitative variables.
+
+```{r}
+## Prepare the data
+clust_data <- 
+  titanic %>% 
+  mutate(Sex = ifelse(Sex == "male", 1, 0)) %>%   ## transforme sex into numeric binary variable
+  select_if(Negate(is.character)) %>%             ## filter the columns that are numeric
+  na.omit()
+```
+
+* Perform the clustering on `r colnames(clust_data %>% select(-Survived, -PassengerId))`
+
+```{r}
+set.seed(123)
+
+kmean1 <- 
+  kmeans(clust_data %>% select(-Survived, -PassengerId), centers = 2, nstart = 1000)
+
+```
+
+---
+
+.center[**How much do these two clusters and the Survived and NotSurvived subgroups overlap?**]
+
+* In order to represent the clusters, I perform a PCA to reduce the feature space
+
+```{r}
+set.seed(123)
+
+## Reduce the space with PCA
+pca <- prcomp(clust_data %>% select(-Survived, -PassengerId), scale = T)
+
+## Extract coordiantes of the passengers:
+indcoord <- as.data.frame(get_pca_ind(pca)$coord)
+
+## Add the cluster to the coord:
+indcoord$cluster <- factor(kmean1$cluster)
+
+## Add the survived info
+indcoord$surv <- clust_data$Survived
+
+# Percentage of variance explained by dimensions
+eigenvalue <- round(get_eigenvalue(pca), 1)
+```
+
+
+---
+
+
+```{r, fig.width=10, fig.height=6, fig.align="center"}
+## PLot it
+indcoord %>% 
+  ggplot(aes(Dim.1, Dim.2, color = cluster)) +
+  geom_point(aes(shape = as.factor(surv)), size = 3)+
+  stat_chull(aes(fill = cluster), geom = "polygon", alpha = .5)+
+  xlab(paste0("Dim 1 (", eigenvalue$variance.percent[1], " %)"))+
+  ylab(paste0("Dim 2 (", eigenvalue$variance.percent[2], " %)"))+
+  ggtitle("Kmean representation")+
+  theme_bw()
+```
+
+
+
+---
+
+
+
+.center[**How much do these two clusters and the Survived and NotSurvived subgroups overlap?**]
+
+</br>
+</br>
+
+* Merge the clustering output to the dataset
+
+```{r}
+clust_data <- cbind(clust_data, cluster = kmean1$cluster)
+```
+
+</br>
+</br>
+
+* Look how `Survived` and `cluster` interfere:
+
+```{r}
+table(clust_data[c("Survived", "cluster")])
+```
+
+.center[That's pretty bad..]
+
+---
+
+
+.center[**Experiment with different subsets of the given features. You can add some new feature(s).**]
+
+* With `Age, Sex, Pclass`
+
+```{r}
+kmean2 <- kmeans(clust_data %>% select(Age, Sex, Pclass), centers = 2, nstart = 1000)
+clust_data <- cbind(clust_data, cluster2 = kmean2$cluster)
+table(clust_data[c("Survived", "cluster2")])
+```
+* With `Age, Sex, Pclass, Fare`
+
+```{r}
+kmean3 <- kmeans(clust_data %>% select(Age, Sex, Pclass, Fare), centers = 2, nstart = 1000)
+clust_data <- cbind(clust_data, cluster3 = kmean3$cluster)
+table(clust_data[c("Survived", "cluster3")])
+```
+
+---
+
+# Conclusion
+
+</br>
+</br>
+
+* K-mean doesn't seem really efficient in predicting the survival of the passengers
+
+</br>
+</br>
+
+* In my opinion, a logistic regression would be more efficient
+
